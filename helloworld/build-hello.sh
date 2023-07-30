@@ -1,16 +1,20 @@
 #!/bin/sh
 
-javac Hello.java
-native-image --static --libc=musl -o hello.static Hello
+echo "Generating docker images ..."
+
 docker build . -f Dockerfile.static -t hello:static
-rm -f hello.upx
-upx --lzma --best -o hello.upx hello.static
+
 docker build . -f Dockerfile.upx -t hello:upx
 
-echo "Generated Executables"
-ls -lh hello.static hello.upx
+echo "Listing ..."
+docker images | grep "hello"
 
-echo "Generated Docker Container Images"
-docker images hello
+echo "Executing ..."
+docker run -it hello:static
+docker run -it hello:upx
 
+echo "Time hello:static: ..."
+time docker run -it hello:static
+echo "Time hello:upx: ..."
+time docker run -it hello:upx
 
