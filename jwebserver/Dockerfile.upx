@@ -1,4 +1,82 @@
+FROM clojure:lein as builder
+
+# The current versions to build against:
+ENV MUSL_VERSION="1.2.3"
+ENV ZLIB_VERSION="1.2.13"
+ENV JDK_VERSION="20"
+ENV GRAALVM_RELEASE="23.1.0-dev-20230812_0125"
+
+WORKDIR /
+
+# Install build dependencies:
+RUN apt-get update && apt-get install -yy curl make gcc libstdc++-10-dev
+
+# Download and compile the musl toolchain:
+RUN curl -sL http://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-native.tgz \
+| tar -C /opt -xzvf -
+
+# Export the TOOLCHAIN_DIR variable:
+ENV TOOLCHAIN_DIR="/opt/x86_64-linux-musl-native"
+
+# Make sure TOOLCHAIN_DIR/bin is on the PATH:
+ENV PATH=$TOOLCHAIN_DIR/bin:$PATH
+
+# Now set musl-gcc to be the CC:
+ENV CC=$TOOLCHAIN_DIR/bin/gcc
+
+# Download and compile zlib:
+RUN curl -sL https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz \
+| tar -C /opt -xzvf -
+
+WORKDIR /opt/zlib-${ZLIB_VERSION}
+RUN ./configure --static --prefix=${TOOLCHAIN_DIR} && make && make install
+
+ENV JAVA_HOME /opt/java/openjdk
+ENV PATH $JAVA_HOME/bin:$PATH
+
+ENV GRAALVM_BASE_URL="https://download.oracle.com/graalvm/"
+ENV GRAALVM_PKG="graalvm-jdk-${JDK_VERSION}_linux-x64_bin.tar.gz"
+ENV DOWNLOAD_URL="${GRAALVM_BASE_URL}/${JDK_VERSION}/latest/${GRAALVM_PKG}"
+
+RUN echo "Downloading $DOWNLOAD_URL ..."
+
+RUN curl --progress-bar --fail --location --retry 3 --url "$DOWNLOAD_URL" --output graalvm-community-dev.tgz
+
+RUN mkdir -p "$JAVA_HOME"
+RUN  tar --extract \
+	  --file graalvm-community-dev.tgz \
+	  --directory "$JAVA_HOME" \
+	  --strip-components 1 \
+	  --no-same-owner
+RUN  rm -f graalvm-community-dev.tgz ${JAVA_HOME}/src.zip
+
+RUN  java --version
+RUN  native-image --help
+
+WORKDIR /
+
+RUN native-image --static --enable-preview --libc=musl -H:+ReportExceptionStackTraces -m jdk.httpserver -o jwebserver.static
+
+FROM alpine:latest as extractor
+RUN apk add --no-cache curl
+RUN curl -sSL $(curl -s https://api.github.com/repos/upx/upx/releases/latest \
+    | grep browser_download_url | grep amd64 | cut -d '"' -f 4) -o /upx.tar.xz
+
+RUN tar -xf upx.tar.xz \
+    && cd upx-*-amd64_linux \
+    && mv upx /bin/upx
+
+
+FROM clojure:lein as upx
+
+COPY --from=extractor /bin/upx /bin/upx
+
+COPY --from=builder jwebserver.static jwebserver.static
+
+RUN upx --lzma --best -o /jwebserver.upx jwebserver.static
+
 FROM scratch
-COPY jwebserver.upx /
-COPY index.html /web/index.html
-ENTRYPOINT ["/jwebserver.upx", "-b", "0.0.0.0", "-d", "/web"]
+COPY --from=upx jwebserver.upx /jwebserver.upx
+COPY http-static/ /http-static
+WORKDIR /http-static
+ENTRYPOINT ["/jwebserver.upx", "-b", "0.0.0.0", "-d", "/http-static"]
