@@ -12,6 +12,12 @@ sleep 1
 curl http://localhost:8080/
 docker stop webserver.static
 
+docker build -f Dockerfile.upx -t webserver:upx .
+docker run --rm -d --name webserver.upx -p 8080:8080 webserver:upx
+sleep 1
+curl http://localhost:8080/
+docker stop webserver.upx
+
 echo "Generated Docker Container Images"
 docker images webserver
 
