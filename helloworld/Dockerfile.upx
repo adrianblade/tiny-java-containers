@@ -39,7 +39,7 @@ RUN ./configure --static --prefix=${TOOLCHAIN_DIR} && make && make install
 
 # Download and install graal-vm with native-image:
 WORKDIR /
-RUN curl -sL https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz \
+RUN curl -sL https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_HOME}/graalvm-community-jdk-${GRAALVM_HOME}_linux-x64_bin.tar.gz \
 | tar -C /opt -xzvf -
 
 WORKDIR /
