@@ -1,4 +1,4 @@
-FROM clojure:lein as builder
+FROM clojure:temurin-21-lein-bullseye as builder
 
 # The current versions to build against:
 ENV MUSL_VERSION="1.2.3"
@@ -11,11 +11,11 @@ COPY Hello.java Hello.java
 
 RUN javac Hello.java
 
-ENV GRAALVM_HOME="/opt/graalvm-community-openjdk-21.0.2+13.1"
+ENV GRAALVM_HOME="/opt/graalvm-community-openjdk-${GRAALVM_VERSION}+13.1"
 ENV PATH="${PATH}:${RESOURCE_DIR}/bin:${GRAALVM_HOME}/bin"
 
 # Install build dependencies:
-RUN apt-get update && apt-get install -yy curl make gcc libstdc++-12-dev
+RUN apt-get update && apt-get install -yy curl make gcc libstdc++-10-dev
 
 # Download and compile the musl toolchain:
 RUN curl -sL http://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-native.tgz \
@@ -39,14 +39,21 @@ RUN ./configure --static --prefix=${TOOLCHAIN_DIR} && make && make install
 
 # Download and install graal-vm with native-image:
 WORKDIR /
-RUN curl -sL https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-x64_bin.tar.gz \
+RUN curl -sL https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz \
 | tar -C /opt -xzvf -
 
 WORKDIR /
 
+RUN rm -rf /usr/share/ca-certificates/mozilla/*
+RUN rm -rf /usr/lib/ssl/certs/*
+
 RUN native-image \
     --static \
     --libc=musl \
+    --no-fallback \
+    -H:+AllowIncompleteClasspath \
+    --report-unsupported-elements-at-runtime \
+    -H:+ReportExceptionStackTraces \
     -o hello.static Hello
 
 
