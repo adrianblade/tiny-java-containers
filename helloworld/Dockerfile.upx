@@ -11,7 +11,7 @@ COPY Hello.java Hello.java
 
 RUN javac Hello.java
 
-ENV GRAALVM_HOME="/opt/graalvm-community-openjdk-${GRAALVM_VERSION}+13.1"
+ENV GRAALVM_HOME="/opt/graalvm-community-openjdk"
 ENV PATH="${PATH}:${RESOURCE_DIR}/bin:${GRAALVM_HOME}/bin"
 
 # Install build dependencies:
@@ -37,10 +37,22 @@ RUN curl -sL https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz \
 WORKDIR /opt/zlib-${ZLIB_VERSION}
 RUN ./configure --static --prefix=${TOOLCHAIN_DIR} && make && make install
 
-# Download and install graal-vm with native-image:
-WORKDIR /
-RUN curl -sL https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_HOME}/graalvm-community-jdk-${GRAALVM_HOME}_linux-x64_bin.tar.gz \
-| tar -C /opt -xzvf -
+
+ENV GRAALVM_BASE_URL="https://github.com/graalvm/graalvm-ce-builds/releases/download/"
+ENV GRAALVM_PKG="jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-x64_bin.tar.gz"
+ENV DOWNLOAD_URL="${GRAALVM_BASE_URL}/${GRAALVM_PKG}"
+
+RUN echo "Downloading $DOWNLOAD_URL ..."
+
+RUN curl --progress-bar --fail --location --retry 3 --url "$DOWNLOAD_URL" --output graalvm-community-dev.tgz
+
+RUN mkdir -p "$GRAALVM_HOME"
+RUN  tar --extract \
+	  --file graalvm-community-dev.tgz \
+	  --directory "$GRAALVM_HOME" \
+	  --strip-components 1 \
+	  --no-same-owner
+RUN  rm -f graalvm-community-dev.tgz ${JAVA_HOME}/src.zip
 
 WORKDIR /
 
@@ -56,7 +68,7 @@ RUN native-image \
     -H:+ReportExceptionStackTraces \
     -o hello.static Hello
 
-FROM alpine:latest as extractor
+FROM alpine:3.19.1 as extractor
 RUN apk add --no-cache curl
 RUN curl -sSL $(curl -s https://api.github.com/repos/upx/upx/releases/latest \
     | grep browser_download_url | grep amd64 | cut -d '"' -f 4) -o /upx.tar.xz
@@ -66,7 +78,7 @@ RUN tar -xf upx.tar.xz \
     && mv upx /bin/upx
 
 
-FROM clojure:lein as upx
+FROM clojure:temurin-21-lein-bullseye as upx
 
 COPY --from=extractor /bin/upx /bin/upx
 
