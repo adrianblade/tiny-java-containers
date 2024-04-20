@@ -52,7 +52,7 @@ RUN  tar --extract \
 	  --directory "$GRAALVM_HOME" \
 	  --strip-components 1 \
 	  --no-same-owner
-RUN  rm -f graalvm-community-dev.tgz ${JAVA_HOME}/src.zip
+RUN  rm -f graalvm-community-dev.tgz ${GRAALVM_HOME}/src.zip
 
 WORKDIR /
 
